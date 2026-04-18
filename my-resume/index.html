@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Resume Chat Widget</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: transparent;
+    }
+
+    .chat-widget {
+      width: 100%;
+      max-width: 480px;
+      border: 1px solid #e0ddd6;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #fff;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.07);
+    }
+
+    .chat-header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid #eeebe4;
+      background: #faf9f7;
+    }
+    .chat-header-title { font-size: 15px; font-weight: 600; color: #1a1a1a; }
+    .chat-header-sub { font-size: 12px; color: #999; margin-top: 3px; }
+
+    .messages {
+      overflow-y: auto;
+      padding: 1rem 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      height: 320px;
+    }
+
+    .msg {
+      max-width: 86%;
+      padding: 0.65rem 1rem;
+      border-radius: 14px;
+      font-size: 13.5px;
+      line-height: 1.55;
+    }
+    .msg.user {
+      align-self: flex-end;
+      background: #2563eb;
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .msg.assistant {
+      align-self: flex-start;
+      background: #f3f2ef;
+      color: #1a1a1a;
+      border-bottom-left-radius: 4px;
+    }
+    .msg.typing { color: #aaa; font-style: italic; }
+
+    .suggestions {
+      padding: 0.25rem 1.25rem 0.75rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .sug-btn {
+      font-size: 12px;
+      padding: 5px 12px;
+      border: 1px solid #ddd;
+      border-radius: 20px;
+      background: transparent;
+      color: #555;
+      cursor: pointer;
+    }
+    .sug-btn:hover { background: #f3f2ef; }
+
+    .chat-input-row {
+      display: flex;
+      gap: 8px;
+      padding: 0.85rem 1.25rem;
+      border-top: 1px solid #eeebe4;
+    }
+    .chat-input-row input {
+      flex: 1;
+      font-size: 13.5px;
+      padding: 9px 14px;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      background: #faf9f7;
+      color: #1a1a1a;
+      outline: none;
+    }
+    .chat-input-row input:focus { border-color: #2563eb; }
+    .send-btn {
+      padding: 9px 18px;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 13.5px;
+      cursor: pointer;
+    }
+    .send-btn:hover { background: #1d4ed8; }
+    .send-btn:disabled { background: #93b4f5; cursor: default; }
+  </style>
+</head>
+<body>
+
+<div class="chat-widget">
+  <div class="chat-header">
+    <div class="chat-header-title">Ask me anything about Avi's experience</div>
+    <div class="chat-header-sub">AI-powered · based on Avi's resume</div>
+  </div>
+
+  <div class="messages" id="messages">
+    <div class="msg assistant">Hey! I'm here to answer any questions about Avi's professional background. What can I help with?</div>
+  </div>
+
+  <div class="suggestions" id="suggestions">
+    <button class="sug-btn" onclick="ask('What is Avi\'s biggest professional achievement?')">Biggest achievement?</button>
+    <button class="sug-btn" onclick="ask('Does Avi have international experience?')">International experience?</button>
+    <button class="sug-btn" onclick="ask('What tools and software does Avi know?')">Tools & software?</button>
+  </div>
+
+  <div class="chat-input-row">
+    <input id="q" type="text" placeholder="Ask a question about Avi..." onkeydown="if(event.key==='Enter') sendQ()" />
+    <button class="send-btn" id="send-btn" onclick="sendQ()">Ask</button>
+  </div>
+</div>
+
+<script>
+  let history = [];
+  let busy = false;
+
+  function addMsg(text, role) {
+    const el = document.createElement('div');
+    el.className = 'msg ' + role;
+    el.textContent = text;
+    const msgs = document.getElementById('messages');
+    msgs.appendChild(el);
+    msgs.scrollTop = msgs.scrollHeight;
+    return el;
+  }
+
+  function ask(q) {
+    document.getElementById('q').value = q;
+    sendQ();
+  }
+
+  async function sendQ() {
+    if (busy) return;
+    const input = document.getElementById('q');
+    const q = input.value.trim();
+    if (!q) return;
+
+    input.value = '';
+    addMsg(q, 'user');
+    document.getElementById('suggestions').style.display = 'none';
+    document.getElementById('send-btn').disabled = true;
+    busy = true;
+
+    const typing = addMsg('Thinking...', 'assistant typing');
+    history.push({ role: 'user', content: q });
+
+    try {
+      const res = await fetch('/.netlify/functions/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: history
+        })
+      });
+
+      const data = await res.json();
+      const reply = data.content?.[0]?.text || 'Sorry, could not generate a response.';
+      typing.className = 'msg assistant';
+      typing.textContent = reply;
+      history.push({ role: 'assistant', content: reply });
+
+    } catch (e) {
+      typing.className = 'msg assistant';
+      typing.textContent = 'Something went wrong. Please try again.';
+      history.pop();
+    }
+
+    busy = false;
+    document.getElementById('send-btn').disabled = false;
+  }
+</script>
+
+</body>
+</html>
